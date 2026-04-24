@@ -540,7 +540,7 @@ export default function DashboardPage() {
             <p>
               将 API 请求发送到：
               <code className="bg-muted px-2 py-1 rounded">
-                /api/v1/chat/completions
+                /v1/chat/completions
               </code>
             </p>
             <p>
