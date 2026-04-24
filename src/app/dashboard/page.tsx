@@ -47,7 +47,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { GripVertical, Plus, Trash2, Pencil } from "lucide-react";
+import { GripVertical, Plus, Trash2, Pencil, Copy, RefreshCw } from "lucide-react";
 
 interface Provider {
   id: string;
@@ -79,6 +79,13 @@ interface Mapping {
       provider: { id: string; name: string };
     };
   };
+}
+
+interface ApiKey {
+  id: string;
+  key: string;
+  name: string;
+  createdAt: string;
 }
 
 // Sortable Row Component for drag-and-drop
@@ -147,6 +154,7 @@ export default function DashboardPage() {
   const router = useRouter();
   const [providers, setProviders] = useState<Provider[]>([]);
   const [mappings, setMappings] = useState<Mapping[]>([]);
+  const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Provider dialog states
@@ -164,6 +172,10 @@ export default function DashboardPage() {
   const [credentialApiKey, setCredentialApiKey] = useState("");
   const [credentialModelsInput, setCredentialModelsInput] = useState("");
 
+  // API Key dialog states
+  const [apiKeyDialogOpen, setApiKeyDialogOpen] = useState(false);
+  const [newApiKeyName, setNewApiKeyName] = useState("");
+
   // Mapping dialog states
   const [mappingDialogOpen, setMappingDialogOpen] = useState(false);
   const [mappingAlias, setMappingAlias] = useState<"nano" | "base" | "pro">("nano");
@@ -180,9 +192,10 @@ export default function DashboardPage() {
 
   const fetchData = async () => {
     try {
-      const [providersRes, mappingsRes] = await Promise.all([
+      const [providersRes, mappingsRes, apiKeysRes] = await Promise.all([
         fetch("/api/providers"),
         fetch("/api/mappings"),
+        fetch("/api/user/api-key"),
       ]);
 
       if (providersRes.ok) {
@@ -193,6 +206,11 @@ export default function DashboardPage() {
       if (mappingsRes.ok) {
         const data = await mappingsRes.json();
         setMappings(data.mappings);
+      }
+
+      if (apiKeysRes.ok) {
+        const data = await apiKeysRes.json();
+        setApiKeys(data.apiKeys);
       }
     } catch (error) {
       console.error("Fetch error:", error);
@@ -208,6 +226,38 @@ export default function DashboardPage() {
   const handleLogout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
     router.push("/login");
+  };
+
+  // API Key handlers
+  const handleCreateApiKey = async () => {
+    try {
+      const res = await fetch("/api/user/api-key", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newApiKeyName }),
+      });
+      if (res.ok) {
+        setApiKeyDialogOpen(false);
+        setNewApiKeyName("");
+        fetchData();
+      }
+    } catch (error) {
+      console.error("Create API key error:", error);
+    }
+  };
+
+  const handleDeleteApiKey = async (id: string) => {
+    if (!confirm("确定要删除此 API Key 吗？")) return;
+    try {
+      await fetch(`/api/user/api-key/${id}`, { method: "DELETE" });
+      fetchData();
+    } catch (error) {
+      console.error("Delete API key error:", error);
+    }
+  };
+
+  const handleCopyApiKey = (key: string) => {
+    navigator.clipboard.writeText(key);
   };
 
   // Provider handlers
@@ -500,6 +550,77 @@ export default function DashboardPage() {
               <code className="bg-muted px-2 py-1 rounded">pro</code>
             </p>
             <p>系统会自动根据配置的优先级和健康状态选择可用的后端 API。</p>
+          </CardContent>
+        </Card>
+
+        {/* API Keys */}
+        <Card>
+          <CardHeader>
+            <div className="flex justify-between items-center">
+              <div>
+                <CardTitle>API Keys</CardTitle>
+                <CardDescription>用于调用转发 API 的密钥</CardDescription>
+              </div>
+              <Button
+                size="sm"
+                onClick={() => setApiKeyDialogOpen(true)}
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                添加 Key
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {apiKeys.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-8">
+                暂无 API Key，点击上方按钮添加
+              </p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>名称</TableHead>
+                    <TableHead>Key</TableHead>
+                    <TableHead>创建时间</TableHead>
+                    <TableHead className="text-right">操作</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {apiKeys.map((apiKey) => (
+                    <TableRow key={apiKey.id}>
+                      <TableCell className="font-medium">{apiKey.name}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <code className="bg-muted px-2 py-1 rounded text-sm font-mono whitespace-nowrap">
+                            {apiKey.key}
+                          </code>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 w-7 p-0"
+                            onClick={() => handleCopyApiKey(apiKey.key)}
+                          >
+                            <Copy className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">
+                        {new Date(apiKey.createdAt).toLocaleDateString()}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDeleteApiKey(apiKey.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
           </CardContent>
         </Card>
 
@@ -821,6 +942,39 @@ export default function DashboardPage() {
           <DialogFooter>
             <Button onClick={editingCredential ? handleUpdateCredential : handleCreateCredential}>
               {editingCredential ? "保存" : "创建"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* API Key Dialog */}
+      <Dialog
+        open={apiKeyDialogOpen}
+        onOpenChange={(open) => {
+          setApiKeyDialogOpen(open);
+          if (!open) {
+            setNewApiKeyName("");
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>添加 API Key</DialogTitle>
+            <DialogDescription>为你的 API Key 命名，方便识别用途</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>名称</Label>
+              <Input
+                value={newApiKeyName}
+                onChange={(e) => setNewApiKeyName(e.target.value)}
+                placeholder="如：生产环境、测试环境"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button onClick={handleCreateApiKey} disabled={!newApiKeyName.trim()}>
+              创建
             </Button>
           </DialogFooter>
         </DialogContent>

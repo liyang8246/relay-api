@@ -1,12 +1,30 @@
 import { NextRequest } from "next/server";
-import { getSession } from "@/lib/auth";
+import { getSession, getUserByApiKey } from "@/lib/auth";
 import { proxyRequest } from "@/lib/proxy";
 
 export async function POST(request: NextRequest) {
-  // 验证用户
-  const session = await getSession();
-  
-  if (!session) {
+  // 尝试通过 API Key 或 Session 认证
+  let userId: string | null = null;
+
+  // 1. 检查 Authorization header (API Key)
+  const authHeader = request.headers.get("Authorization");
+  if (authHeader?.startsWith("Bearer ")) {
+    const apiKey = authHeader.slice(7);
+    const user = await getUserByApiKey(apiKey);
+    if (user) {
+      userId = user.id;
+    }
+  }
+
+  // 2. 检查 Session cookie
+  if (!userId) {
+    const session = await getSession();
+    if (session) {
+      userId = session.user.id;
+    }
+  }
+
+  if (!userId) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
       status: 401,
       headers: { "Content-Type": "application/json" },
@@ -27,7 +45,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 执行代理
-    return await proxyRequest(session.user.id, body);
+    return await proxyRequest(userId, body);
   } catch (error) {
     console.error("Proxy error:", error);
     return new Response(JSON.stringify({

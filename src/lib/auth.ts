@@ -1,7 +1,7 @@
 import bcrypt from "bcryptjs";
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
-import { db, users } from "@/db";
+import { db, users, apiKeys } from "@/db";
 import { eq } from "drizzle-orm";
 import { User } from "@/db/schema";
 
@@ -51,6 +51,15 @@ export async function getSession(): Promise<{ user: User } | null> {
   if (!user) return null;
   
   return { user };
+}
+
+export async function getUserByApiKey(key: string): Promise<User | null> {
+  const apiKey = await db.query.apiKeys.findFirst({
+    where: eq(apiKeys.key, key),
+    with: { user: true },
+  });
+
+  return apiKey?.user ?? null;
 }
 
 export async function setSessionCookie(token: string) {

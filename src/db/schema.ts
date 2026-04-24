@@ -10,6 +10,15 @@ export const users = pgTable("users", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// API Key 表
+export const apiKeys = pgTable("api_keys", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  key: text("key").notNull().unique(),
+  name: text("name").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 // 供应商表
 export const providers = pgTable("providers", {
   id: text("id").primaryKey(),
@@ -64,9 +73,18 @@ export const credentialStates = pgTable("credential_states", {
 // 关系定义
 // ============================================
 
-// 用户关系: has many providers
+// 用户关系: has many providers, has many apiKeys
 export const usersRelations = relations(users, ({ many }) => ({
   providers: many(providers),
+  apiKeys: many(apiKeys),
+}));
+
+// API Key 关系: belongs to user
+export const apiKeysRelations = relations(apiKeys, ({ one }) => ({
+  user: one(users, {
+    fields: [apiKeys.userId],
+    references: [users.id],
+  }),
 }));
 
 // 供应商关系: belongs to user, has many credentials
@@ -115,3 +133,5 @@ export type NewCredentialModel = typeof credentialModels.$inferInsert;
 export type ModelMapping = typeof modelMappings.$inferSelect;
 export type NewModelMapping = typeof modelMappings.$inferInsert;
 export type CredentialState = typeof credentialStates.$inferSelect;
+export type ApiKey = typeof apiKeys.$inferSelect;
+export type NewApiKey = typeof apiKeys.$inferInsert;
