@@ -145,6 +145,9 @@ async function logRequest(params: {
   alias: string;
   model: string;
   ip: string;
+  requestMessages: unknown;
+  requestParams: unknown;
+  responseContent: string | null;
   inputTokens: number | null;
   outputTokens: number | null;
   totalTokens: number | null;
@@ -162,6 +165,9 @@ async function logRequest(params: {
       alias: params.alias,
       model: params.model,
       ip: params.ip,
+      requestMessages: params.requestMessages,
+      requestParams: params.requestParams,
+      responseContent: params.responseContent,
       inputTokens: params.inputTokens,
       outputTokens: params.outputTokens,
       totalTokens: params.totalTokens,
@@ -219,6 +225,7 @@ export async function proxyRequest(
     let inputTokens: number | null = null;
     let outputTokens: number | null = null;
     let totalTokens: number | null = null;
+    let responseContent: string | null = null;
 
     try {
       // 增加并发计数
@@ -226,10 +233,16 @@ export async function proxyRequest(
 
       // 构建请求
       const url = `${provider.baseUrl}/chat/completions`;
+      const isStream = rest.stream === true;
       const body = {
         ...rest,
         model: credentialModel.model,
       };
+
+      // 提取请求参数（排除 messages）
+      const { messages, ...params } = body;
+      const requestMessages = messages;
+      const requestParams = params;
 
       const requestStartTime = Date.now();
       
@@ -247,7 +260,7 @@ export async function proxyRequest(
         throw new Error(`API error: ${response.status} - ${errorText}`);
       }
 
-      // 计算首字时间（粗略估计）
+      // 计算首字时间
       timeToFirstToken = Date.now() - requestStartTime;
 
       // 标记健康
@@ -256,26 +269,70 @@ export async function proxyRequest(
       // 减少并发计数
       await updateConcurrency(credentialModel.id, -1);
 
-      // 记录成功日志
-      const duration = Date.now() - startTime;
-      await logRequest({
-        userId,
-        providerId: provider.id,
-        apiKeyId,
-        alias,
-        model: credentialModel.model,
-        ip,
-        inputTokens,
-        outputTokens,
-        totalTokens,
-        duration,
-        timeToFirstToken,
-        isSuccess: true,
-        errorMessage: null,
-      });
+      // 处理响应
+      if (isStream) {
+        // 流式响应：不记录内容，直接透传
+        const duration = Date.now() - startTime;
+        await logRequest({
+          userId,
+          providerId: provider.id,
+          apiKeyId,
+          alias,
+          model: credentialModel.model,
+          ip,
+          requestMessages,
+          requestParams,
+          responseContent: null, // 流式不记录
+          inputTokens,
+          outputTokens,
+          totalTokens,
+          duration,
+          timeToFirstToken,
+          isSuccess: true,
+          errorMessage: null,
+        });
 
-      // 返回响应
-      return response;
+        return response;
+      } else {
+        // 非流式响应：记录内容
+        const responseData = await response.json();
+        
+        // 提取响应内容和 token 使用量
+        if (responseData.choices?.[0]?.message?.content) {
+          responseContent = responseData.choices[0].message.content;
+        }
+        if (responseData.usage) {
+          inputTokens = responseData.usage.prompt_tokens ?? null;
+          outputTokens = responseData.usage.completion_tokens ?? null;
+          totalTokens = responseData.usage.total_tokens ?? null;
+        }
+
+        const duration = Date.now() - startTime;
+        await logRequest({
+          userId,
+          providerId: provider.id,
+          apiKeyId,
+          alias,
+          model: credentialModel.model,
+          ip,
+          requestMessages,
+          requestParams,
+          responseContent,
+          inputTokens,
+          outputTokens,
+          totalTokens,
+          duration,
+          timeToFirstToken,
+          isSuccess: true,
+          errorMessage: null,
+        });
+
+        // 返回响应
+        return new Response(JSON.stringify(responseData), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
     } catch (error) {
       // 减少并发计数
       await updateConcurrency(credentialModel.id, -1);
@@ -298,6 +355,9 @@ export async function proxyRequest(
           alias,
           model: credentialModel.model,
           ip,
+          requestMessages: request.messages,
+          requestParams: { ...rest, model: credentialModel.model },
+          responseContent: null,
           inputTokens,
           outputTokens,
           totalTokens,
@@ -318,6 +378,9 @@ export async function proxyRequest(
         alias,
         model: credentialModel.model,
         ip,
+        requestMessages: request.messages,
+        requestParams: { ...rest, model: credentialModel.model },
+        responseContent: null,
         inputTokens,
         outputTokens,
         totalTokens,
@@ -345,6 +408,9 @@ export async function proxyRequest(
     alias,
     model: alias,
     ip,
+    requestMessages: request.messages,
+    requestParams: rest,
+    responseContent: null,
     inputTokens: null,
     outputTokens: null,
     totalTokens: null,

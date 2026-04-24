@@ -93,6 +93,9 @@ interface RequestLog {
   alias: string;
   model: string;
   ip: string;
+  requestMessages: Array<{ role: string; content: string }>;
+  requestParams: Record<string, unknown>;
+  responseContent: string | null;
   inputTokens: number | null;
   outputTokens: number | null;
   totalTokens: number | null;
@@ -103,6 +106,10 @@ interface RequestLog {
   createdAt: string;
   provider: { id: string; name: string } | null;
   apiKey: { id: string; name: string } | null;
+}
+
+interface LogDetail extends RequestLog {
+  provider: { id: string; name: string; baseUrl: string } | null;
 }
 
 // Sortable Row Component for drag-and-drop
@@ -194,6 +201,11 @@ export default function DashboardPage() {
   const [apiKeyDialogOpen, setApiKeyDialogOpen] = useState(false);
   const [newApiKeyName, setNewApiKeyName] = useState("");
 
+  // Log detail dialog states
+  const [logDetailDialogOpen, setLogDetailDialogOpen] = useState(false);
+  const [selectedLogDetail, setSelectedLogDetail] = useState<LogDetail | null>(null);
+  const [loadingLogDetail, setLoadingLogDetail] = useState(false);
+
   // Mapping dialog states
   const [mappingDialogOpen, setMappingDialogOpen] = useState(false);
   const [mappingAlias, setMappingAlias] = useState<"nano" | "base" | "pro">("nano");
@@ -250,6 +262,23 @@ export default function DashboardPage() {
   const handleLogout = async () => {
     await fetch("/api/auth/logout", { method: "POST" });
     router.push("/login");
+  };
+
+  // Log detail handler
+  const handleViewLogDetail = async (logId: string) => {
+    setLoadingLogDetail(true);
+    setLogDetailDialogOpen(true);
+    try {
+      const res = await fetch(`/api/logs/${logId}`);
+      if (res.ok) {
+        const data = await res.json();
+        setSelectedLogDetail(data.log);
+      }
+    } catch (error) {
+      console.error("Get log detail error:", error);
+    } finally {
+      setLoadingLogDetail(false);
+    }
   };
 
   // API Key handlers
@@ -864,6 +893,7 @@ export default function DashboardPage() {
                     <TableHead>用时/首字</TableHead>
                     <TableHead>IP</TableHead>
                     <TableHead>状态</TableHead>
+                    <TableHead>操作</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -898,6 +928,15 @@ export default function DashboardPage() {
                             失败
                           </span>
                         )}
+                      </TableCell>
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleViewLogDetail(log.id)}
+                        >
+                          详情
+                        </Button>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -1175,6 +1214,135 @@ export default function DashboardPage() {
               创建
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Log Detail Dialog */}
+      <Dialog
+        open={logDetailDialogOpen}
+        onOpenChange={(open) => {
+          setLogDetailDialogOpen(open);
+          if (!open) {
+            setSelectedLogDetail(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>请求详情</DialogTitle>
+          </DialogHeader>
+          {loadingLogDetail ? (
+            <div className="py-8 text-center text-muted-foreground">加载中...</div>
+          ) : selectedLogDetail ? (
+            <div className="space-y-6 py-4">
+              {/* 基本信息 */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-muted-foreground text-sm">时间</p>
+                  <p className="text-sm mt-1">
+                    {new Date(selectedLogDetail.createdAt).toLocaleString("zh-CN")}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-sm">状态</p>
+                  <p className="text-sm mt-1">
+                    {selectedLogDetail.isSuccess ? (
+                      <span className="text-green-600">成功</span>
+                    ) : (
+                      <span className="text-red-600">失败</span>
+                    )}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-sm">供应商</p>
+                  <p className="text-sm mt-1">{selectedLogDetail.provider?.name ?? "-"}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-sm">API Key</p>
+                  <p className="text-sm mt-1">{selectedLogDetail.apiKey?.name ?? "-"}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-sm">模型别名</p>
+                  <p className="text-sm mt-1">{selectedLogDetail.alias}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-sm">实际模型</p>
+                  <p className="text-sm mt-1 font-mono">{selectedLogDetail.model}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-sm">总耗时</p>
+                  <p className="text-sm mt-1">
+                    {selectedLogDetail.duration ? `${selectedLogDetail.duration}ms` : "-"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-sm">首字时间</p>
+                  <p className="text-sm mt-1">
+                    {selectedLogDetail.timeToFirstToken ? `${selectedLogDetail.timeToFirstToken}ms` : "-"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-sm">输入 Token</p>
+                  <p className="text-sm mt-1">{selectedLogDetail.inputTokens ?? "-"}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-sm">输出 Token</p>
+                  <p className="text-sm mt-1">{selectedLogDetail.outputTokens ?? "-"}</p>
+                </div>
+                <div className="col-span-2">
+                  <p className="text-muted-foreground text-sm">客户端 IP</p>
+                  <p className="text-sm mt-1 font-mono">{selectedLogDetail.ip}</p>
+                </div>
+              </div>
+
+              {/* 请求参数 */}
+              {selectedLogDetail.requestParams && Object.keys(selectedLogDetail.requestParams as Record<string, unknown>).length > 0 && (
+                <div>
+                  <p className="text-muted-foreground text-sm">请求参数</p>
+                  <pre className="mt-1 p-3 bg-muted rounded-lg text-xs overflow-x-auto">
+                    {JSON.stringify(selectedLogDetail.requestParams, null, 2)}
+                  </pre>
+                </div>
+              )}
+
+              {/* 输入消息 */}
+              <div>
+                <p className="text-muted-foreground text-sm">输入消息</p>
+                <div className="mt-1 p-3 bg-muted rounded-lg space-y-2 max-h-60 overflow-y-auto">
+                  {(selectedLogDetail.requestMessages as Array<{ role: string; content: string }>)?.map((msg, i) => (
+                    <div key={i} className="text-sm">
+                      <span className="font-medium text-muted-foreground">{msg.role}: </span>
+                      <span className="whitespace-pre-wrap">{msg.content}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* 输出内容 */}
+              <div>
+                <p className="text-muted-foreground text-sm">输出内容</p>
+                {selectedLogDetail.responseContent ? (
+                  <div className="mt-1 p-3 bg-muted rounded-lg text-sm whitespace-pre-wrap max-h-60 overflow-y-auto">
+                    {selectedLogDetail.responseContent}
+                  </div>
+                ) : (
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {selectedLogDetail.isSuccess ? "（流式响应，未记录内容）" : "无"}
+                  </p>
+                )}
+              </div>
+
+              {/* 错误信息 */}
+              {selectedLogDetail.errorMessage && (
+                <div>
+                  <p className="text-muted-foreground text-sm">错误信息</p>
+                  <p className="mt-1 p-3 bg-red-100 text-red-800 rounded-lg text-sm">
+                    {selectedLogDetail.errorMessage}
+                  </p>
+                </div>
+              )}
+            </div>
+          ) : null}
         </DialogContent>
       </Dialog>
     </div>

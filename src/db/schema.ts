@@ -78,11 +78,18 @@ export const requestLogs = pgTable("request_logs", {
   alias: text("alias").notNull(), // 请求的别名 (nano/base/pro)
   model: text("model").notNull(), // 实际模型
   ip: text("ip"),
+  // 请求详情
+  requestMessages: json("request_messages").notNull(), // messages 数组
+  requestParams: json("request_params"), // 其他参数 (temperature, max_tokens 等)
+  // 响应详情
+  responseContent: text("response_content"), // 响应内容
   inputTokens: integer("input_tokens"),
   outputTokens: integer("output_tokens"),
   totalTokens: integer("total_tokens"),
+  // 性能指标
   duration: integer("duration"), // 总耗时 (ms)
   timeToFirstToken: integer("time_to_first_token"), // 首字时间 (ms)
+  // 状态
   isSuccess: boolean("is_success").notNull(),
   errorMessage: text("error_message"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
