@@ -229,7 +229,6 @@ export async function proxyRequest(
       const body = {
         ...rest,
         model: credentialModel.model,
-        stream: false, // 暂不支持流式，以便提取 token 使用量
       };
 
       const requestStartTime = Date.now();
@@ -251,69 +250,32 @@ export async function proxyRequest(
       // 计算首字时间（粗略估计）
       timeToFirstToken = Date.now() - requestStartTime;
 
-      // 提取 token 使用量
-      try {
-        const responseData = await response.json();
-        if (responseData.usage) {
-          inputTokens = responseData.usage.prompt_tokens ?? null;
-          outputTokens = responseData.usage.completion_tokens ?? null;
-          totalTokens = responseData.usage.total_tokens ?? null;
-        }
-        
-        // 标记健康
-        await markHealthy(credentialModel.id);
-        
-        // 减少并发计数
-        await updateConcurrency(credentialModel.id, -1);
-        
-        // 记录成功日志
-        const duration = Date.now() - startTime;
-        await logRequest({
-          userId,
-          providerId: provider.id,
-          apiKeyId,
-          alias,
-          model: credentialModel.model,
-          ip,
-          inputTokens,
-          outputTokens,
-          totalTokens,
-          duration,
-          timeToFirstToken,
-          isSuccess: true,
-          errorMessage: null,
-        });
+      // 标记健康
+      await markHealthy(credentialModel.id);
 
-        // 返回响应（重新构造）
-        return new Response(JSON.stringify(responseData), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        });
-      } catch (parseError) {
-        console.error("Parse response error:", parseError);
-        // 即使解析失败，也认为请求成功
-        await markHealthy(credentialModel.id);
-        await updateConcurrency(credentialModel.id, -1);
-        
-        const duration = Date.now() - startTime;
-        await logRequest({
-          userId,
-          providerId: provider.id,
-          apiKeyId,
-          alias,
-          model: credentialModel.model,
-          ip,
-          inputTokens: null,
-          outputTokens: null,
-          totalTokens: null,
-          duration,
-          timeToFirstToken,
-          isSuccess: true,
-          errorMessage: null,
-        });
+      // 减少并发计数
+      await updateConcurrency(credentialModel.id, -1);
 
-        return response;
-      }
+      // 记录成功日志
+      const duration = Date.now() - startTime;
+      await logRequest({
+        userId,
+        providerId: provider.id,
+        apiKeyId,
+        alias,
+        model: credentialModel.model,
+        ip,
+        inputTokens,
+        outputTokens,
+        totalTokens,
+        duration,
+        timeToFirstToken,
+        isSuccess: true,
+        errorMessage: null,
+      });
+
+      // 返回响应
+      return response;
     } catch (error) {
       // 减少并发计数
       await updateConcurrency(credentialModel.id, -1);

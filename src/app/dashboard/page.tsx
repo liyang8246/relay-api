@@ -862,7 +862,6 @@ export default function DashboardPage() {
                     <TableHead>Key</TableHead>
                     <TableHead>模型</TableHead>
                     <TableHead>用时/首字</TableHead>
-                    <TableHead>输入/输出</TableHead>
                     <TableHead>IP</TableHead>
                     <TableHead>状态</TableHead>
                   </TableRow>
@@ -889,9 +888,6 @@ export default function DashboardPage() {
                       <TableCell className="text-sm">
                         {log.duration ? `${log.duration}ms` : "-"}
                         {log.timeToFirstToken ? ` / ${log.timeToFirstToken}ms` : ""}
-                      </TableCell>
-                      <TableCell className="text-sm">
-                        {log.inputTokens ?? "-"} / {log.outputTokens ?? "-"}
                       </TableCell>
                       <TableCell className="text-xs font-mono">{log.ip}</TableCell>
                       <TableCell>
