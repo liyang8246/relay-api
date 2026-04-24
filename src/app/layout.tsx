@@ -13,8 +13,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "API Proxy",
-  description: "AI API 转发服务",
+  title: "RelayAPI",
+  description: "AI API 转发服务 - 多供应商负载均衡与故障转移",
 };
 
 export default function RootLayout({
