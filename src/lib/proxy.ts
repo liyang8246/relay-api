@@ -1,12 +1,19 @@
-import { db, modelMappings, credentialModels, credentials, providers, credentialStates } from "@/db";
-import { eq, and, gt } from "drizzle-orm";
+import { db, modelMappings, credentialModels, credentials, providers, credentialStates, requestLogs } from "@/db";
+import { eq, and, desc } from "drizzle-orm";
 import { shouldFailover } from "@/lib/utils";
+import { generateId } from "@/lib/utils";
 
 interface ProxyRequest {
   model: string;
   messages: Array<{ role: string; content: string }>;
   stream?: boolean;
   [key: string]: unknown;
+}
+
+interface ProxyContext {
+  apiKeyId: string | null;
+  ip: string;
+  startTime: number;
 }
 
 interface AvailableEndpoint {
@@ -130,12 +137,60 @@ async function markHealthy(credentialModelId: string) {
   }
 }
 
+// 记录请求日志
+async function logRequest(params: {
+  userId: string;
+  providerId: string | null;
+  apiKeyId: string | null;
+  alias: string;
+  model: string;
+  ip: string;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  totalTokens: number | null;
+  duration: number;
+  timeToFirstToken: number | null;
+  isSuccess: boolean;
+  errorMessage: string | null;
+}) {
+  try {
+    await db.insert(requestLogs).values({
+      id: generateId(),
+      userId: params.userId,
+      providerId: params.providerId,
+      apiKeyId: params.apiKeyId,
+      alias: params.alias,
+      model: params.model,
+      ip: params.ip,
+      inputTokens: params.inputTokens,
+      outputTokens: params.outputTokens,
+      totalTokens: params.totalTokens,
+      duration: params.duration,
+      timeToFirstToken: params.timeToFirstToken,
+      isSuccess: params.isSuccess,
+      errorMessage: params.errorMessage,
+    });
+  } catch (error) {
+    console.error("Log request error:", error);
+  }
+}
+
+// 从响应中提取 token 使用量
+function extractTokenUsage(response: Response): { inputTokens: number; outputTokens: number; totalTokens: number } | null {
+  // 对于非流式响应，尝试从响应体中提取
+  // 注意：这里无法直接读取响应体，因为已经被消费了
+  // 实际实现中需要在调用处传递
+  return null;
+}
+
 // 执行代理请求
 export async function proxyRequest(
   userId: string,
-  request: ProxyRequest
+  request: ProxyRequest,
+  context: ProxyContext
 ): Promise<Response> {
   const { model: alias, ...rest } = request;
+  const { apiKeyId, ip, startTime } = context;
 
   // 验证 alias
   if (!["nano", "base", "pro"].includes(alias)) {
@@ -160,6 +215,10 @@ export async function proxyRequest(
   // 尝试每个端点
   for (const endpoint of endpoints) {
     const { credentialModel, credential, provider } = endpoint;
+    let timeToFirstToken: number | null = null;
+    let inputTokens: number | null = null;
+    let outputTokens: number | null = null;
+    let totalTokens: number | null = null;
 
     try {
       // 增加并发计数
@@ -172,6 +231,8 @@ export async function proxyRequest(
         model: credentialModel.model,
       };
 
+      const requestStartTime = Date.now();
+      
       const response = await fetch(url, {
         method: "POST",
         headers: {
@@ -186,11 +247,32 @@ export async function proxyRequest(
         throw new Error(`API error: ${response.status} - ${errorText}`);
       }
 
+      // 计算首字时间（粗略估计）
+      timeToFirstToken = Date.now() - requestStartTime;
+
       // 标记健康
       await markHealthy(credentialModel.id);
 
       // 减少并发计数
       await updateConcurrency(credentialModel.id, -1);
+
+      // 记录成功日志
+      const duration = Date.now() - startTime;
+      await logRequest({
+        userId,
+        providerId: provider.id,
+        apiKeyId,
+        alias,
+        model: credentialModel.model,
+        ip,
+        inputTokens,
+        outputTokens,
+        totalTokens,
+        duration,
+        timeToFirstToken,
+        isSuccess: true,
+        errorMessage: null,
+      });
 
       // 返回响应
       return response;
@@ -201,15 +283,52 @@ export async function proxyRequest(
       // 标记错误
       await markError(credentialModel.id, error);
 
+      const duration = Date.now() - startTime;
+      const errorMessage = error instanceof Error ? error.message : "Unknown error";
+
       // 如果应该故障转移，继续下一个端点
       if (shouldFailover(error)) {
         console.log(`Failover from ${credentialModel.model}:`, error);
+        
+        // 记录失败日志但不返回，继续尝试下一个端点
+        await logRequest({
+          userId,
+          providerId: provider.id,
+          apiKeyId,
+          alias,
+          model: credentialModel.model,
+          ip,
+          inputTokens,
+          outputTokens,
+          totalTokens,
+          duration,
+          timeToFirstToken,
+          isSuccess: false,
+          errorMessage,
+        });
+        
         continue;
       }
 
-      // 否则返回错误
+      // 否则记录日志并返回错误
+      await logRequest({
+        userId,
+        providerId: provider.id,
+        apiKeyId,
+        alias,
+        model: credentialModel.model,
+        ip,
+        inputTokens,
+        outputTokens,
+        totalTokens,
+        duration,
+        timeToFirstToken,
+        isSuccess: false,
+        errorMessage,
+      });
+
       return new Response(JSON.stringify({
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: errorMessage,
       }), {
         status: 500,
         headers: { "Content-Type": "application/json" },
@@ -218,6 +337,23 @@ export async function proxyRequest(
   }
 
   // 所有端点都失败
+  const duration = Date.now() - startTime;
+  await logRequest({
+    userId,
+    providerId: null,
+    apiKeyId,
+    alias,
+    model: alias,
+    ip,
+    inputTokens: null,
+    outputTokens: null,
+    totalTokens: null,
+    duration,
+    timeToFirstToken: null,
+    isSuccess: false,
+    errorMessage: "All endpoints failed",
+  });
+
   return new Response(JSON.stringify({
     error: "All endpoints failed",
   }), {

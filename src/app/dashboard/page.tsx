@@ -88,6 +88,23 @@ interface ApiKey {
   createdAt: string;
 }
 
+interface RequestLog {
+  id: string;
+  alias: string;
+  model: string;
+  ip: string;
+  inputTokens: number | null;
+  outputTokens: number | null;
+  totalTokens: number | null;
+  duration: number | null;
+  timeToFirstToken: number | null;
+  isSuccess: boolean;
+  errorMessage: string | null;
+  createdAt: string;
+  provider: { id: string; name: string } | null;
+  apiKey: { id: string; name: string } | null;
+}
+
 // Sortable Row Component for drag-and-drop
 function SortableMappingRow({
   mapping,
@@ -155,6 +172,7 @@ export default function DashboardPage() {
   const [providers, setProviders] = useState<Provider[]>([]);
   const [mappings, setMappings] = useState<Mapping[]>([]);
   const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
+  const [logs, setLogs] = useState<RequestLog[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Provider dialog states
@@ -192,10 +210,11 @@ export default function DashboardPage() {
 
   const fetchData = async () => {
     try {
-      const [providersRes, mappingsRes, apiKeysRes] = await Promise.all([
+      const [providersRes, mappingsRes, apiKeysRes, logsRes] = await Promise.all([
         fetch("/api/providers"),
         fetch("/api/mappings"),
         fetch("/api/user/api-key"),
+        fetch("/api/logs?limit=100"),
       ]);
 
       if (providersRes.ok) {
@@ -211,6 +230,11 @@ export default function DashboardPage() {
       if (apiKeysRes.ok) {
         const data = await apiKeysRes.json();
         setApiKeys(data.apiKeys);
+      }
+
+      if (logsRes.ok) {
+        const data = await logsRes.json();
+        setLogs(data.logs);
       }
     } catch (error) {
       console.error("Fetch error:", error);
@@ -817,6 +841,75 @@ export default function DashboardPage() {
             </Card>
           );
         })}
+
+        {/* 请求日志 */}
+        <Card>
+          <CardHeader>
+            <CardTitle>请求日志</CardTitle>
+            <CardDescription>最近 100 条请求记录</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {logs.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-8">
+                暂无请求记录
+              </p>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>时间</TableHead>
+                    <TableHead>供应商</TableHead>
+                    <TableHead>Key</TableHead>
+                    <TableHead>模型</TableHead>
+                    <TableHead>用时/首字</TableHead>
+                    <TableHead>输入/输出</TableHead>
+                    <TableHead>IP</TableHead>
+                    <TableHead>状态</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {logs.map((log) => (
+                    <TableRow key={log.id}>
+                      <TableCell className="text-sm">
+                        {new Date(log.createdAt).toLocaleString("zh-CN", {
+                          month: "2-digit",
+                          day: "2-digit",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                          second: "2-digit",
+                        })}
+                      </TableCell>
+                      <TableCell>{log.provider?.name ?? "-"}</TableCell>
+                      <TableCell>{log.apiKey?.name ?? "-"}</TableCell>
+                      <TableCell>
+                        <span className="text-xs text-muted-foreground">{log.alias}</span>
+                        <span className="mx-1">/</span>
+                        <span className="text-xs">{log.model}</span>
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {log.duration ? `${log.duration}ms` : "-"}
+                        {log.timeToFirstToken ? ` / ${log.timeToFirstToken}ms` : ""}
+                      </TableCell>
+                      <TableCell className="text-sm">
+                        {log.inputTokens ?? "-"} / {log.outputTokens ?? "-"}
+                      </TableCell>
+                      <TableCell className="text-xs font-mono">{log.ip}</TableCell>
+                      <TableCell>
+                        {log.isSuccess ? (
+                          <span className="text-green-600 text-xs">成功</span>
+                        ) : (
+                          <span className="text-red-600 text-xs" title={log.errorMessage ?? ""}>
+                            失败
+                          </span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
       </div>
 
       {/* Provider Dialog */}

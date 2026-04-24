@@ -1,18 +1,26 @@
 import { NextRequest } from "next/server";
 import { getSession, getUserByApiKey } from "@/lib/auth";
 import { proxyRequest } from "@/lib/proxy";
+import { db, apiKeys } from "@/db";
+import { eq } from "drizzle-orm";
 
 export async function POST(request: NextRequest) {
+  const startTime = Date.now();
+  
   // 尝试通过 API Key 或 Session 认证
   let userId: string | null = null;
+  let apiKeyId: string | null = null;
 
   // 1. 检查 Authorization header (API Key)
   const authHeader = request.headers.get("Authorization");
   if (authHeader?.startsWith("Bearer ")) {
-    const apiKey = authHeader.slice(7);
-    const user = await getUserByApiKey(apiKey);
-    if (user) {
-      userId = user.id;
+    const key = authHeader.slice(7);
+    const apiKeyRecord = await db.query.apiKeys.findFirst({
+      where: eq(apiKeys.key, key),
+    });
+    if (apiKeyRecord) {
+      userId = apiKeyRecord.userId;
+      apiKeyId = apiKeyRecord.id;
     }
   }
 
@@ -31,6 +39,11 @@ export async function POST(request: NextRequest) {
     });
   }
 
+  // 获取客户端 IP
+  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() 
+    ?? request.headers.get("x-real-ip") 
+    ?? "unknown";
+
   try {
     const body = await request.json();
     
@@ -45,7 +58,11 @@ export async function POST(request: NextRequest) {
     }
 
     // 执行代理
-    return await proxyRequest(userId, body);
+    return await proxyRequest(userId, body, {
+      apiKeyId,
+      ip,
+      startTime,
+    });
   } catch (error) {
     console.error("Proxy error:", error);
     return new Response(JSON.stringify({

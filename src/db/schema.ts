@@ -69,6 +69,25 @@ export const credentialStates = pgTable("credential_states", {
   cooldownUntil: timestamp("cooldown_until"), // 冷却时间
 });
 
+// 请求日志表
+export const requestLogs = pgTable("request_logs", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  providerId: text("provider_id").references(() => providers.id, { onDelete: "set null" }),
+  apiKeyId: text("api_key_id").references(() => apiKeys.id, { onDelete: "set null" }),
+  alias: text("alias").notNull(), // 请求的别名 (nano/base/pro)
+  model: text("model").notNull(), // 实际模型
+  ip: text("ip"),
+  inputTokens: integer("input_tokens"),
+  outputTokens: integer("output_tokens"),
+  totalTokens: integer("total_tokens"),
+  duration: integer("duration"), // 总耗时 (ms)
+  timeToFirstToken: integer("time_to_first_token"), // 首字时间 (ms)
+  isSuccess: boolean("is_success").notNull(),
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 // ============================================
 // 关系定义
 // ============================================
@@ -121,6 +140,22 @@ export const modelMappingsRelations = relations(modelMappings, ({ one }) => ({
   }),
 }));
 
+// 请求日志关系
+export const requestLogsRelations = relations(requestLogs, ({ one }) => ({
+  user: one(users, {
+    fields: [requestLogs.userId],
+    references: [users.id],
+  }),
+  provider: one(providers, {
+    fields: [requestLogs.providerId],
+    references: [providers.id],
+  }),
+  apiKey: one(apiKeys, {
+    fields: [requestLogs.apiKeyId],
+    references: [apiKeys.id],
+  }),
+}));
+
 // 类型导出
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
@@ -135,3 +170,5 @@ export type NewModelMapping = typeof modelMappings.$inferInsert;
 export type CredentialState = typeof credentialStates.$inferSelect;
 export type ApiKey = typeof apiKeys.$inferSelect;
 export type NewApiKey = typeof apiKeys.$inferInsert;
+export type RequestLog = typeof requestLogs.$inferSelect;
+export type NewRequestLog = typeof requestLogs.$inferInsert;
