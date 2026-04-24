@@ -815,11 +815,11 @@ export default function DashboardPage() {
                           <TableRow>
                             <TableHead className="w-10"></TableHead>
                             <TableHead className="w-16">优先级</TableHead>
-                            <TableHead>供应商</TableHead>
-                            <TableHead>凭证</TableHead>
-                            <TableHead>模型</TableHead>
-                            <TableHead>启用</TableHead>
-                            <TableHead className="text-right">操作</TableHead>
+                            <TableHead className="w-[180px]">供应商</TableHead>
+                            <TableHead className="w-[150px]">凭证</TableHead>
+                            <TableHead className="w-[180px]">模型</TableHead>
+                            <TableHead className="w-20">启用</TableHead>
+                            <TableHead className="w-20 text-right">操作</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
