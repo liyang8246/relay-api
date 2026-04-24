@@ -160,7 +160,7 @@ function SortableMappingRow({
           onCheckedChange={() => onToggle(mapping.id, mapping.isEnabled)}
         />
       </TableCell>
-      <TableCell>
+      <TableCell className="text-right">
         <Button
           variant="ghost"
           size="icon"
