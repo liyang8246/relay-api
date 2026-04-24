@@ -1,36 +1,101 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# RelayAPI
 
-## Getting Started
+AI API 代理服务，支持故障转移（failover）。统一管理多个 AI provider 的 API 密钥，自动处理请求失败时的切换。
 
-First, run the development server:
+## 功能特性
+
+- **用户认证** - 注册、登录、JWT 会话管理
+- **Provider 管理** - 添加和管理多个 AI 服务提供商（如 OpenAI、Anthropic 等）
+- **Credential 管理** - 安全存储 API 密钥，支持多个密钥轮换
+- **模型映射** - 配置模型别名，灵活切换底层模型
+- **Failover 机制** - 请求失败时自动切换到备用 provider
+- **代理接口** - 兼容 OpenAI API 格式的 `/api/v1/chat/completions` 端点
+
+## 快速开始
+
+### 安装
+
+```bash
+npm install
+```
+
+### 配置环境变量
+
+复制 `.env.example` 为 `.env.local` 并填写：
+
+```bash
+cp .env.example .env.local
+```
+
+### 数据库迁移
+
+```bash
+npm run db:push
+```
+
+### 运行
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+访问 http://localhost:3000
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 环境变量
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| 变量 | 说明 |
+|------|------|
+| `DATABASE_URL` | PostgreSQL 数据库连接字符串（Neon 或其他兼容数据库） |
+| `JWT_SECRET` | JWT 签名密钥，至少 32 个字符 |
 
-## Learn More
+## API 端点
 
-To learn more about Next.js, take a look at the following resources:
+### 认证
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/api/auth/register` | 用户注册 |
+| POST | `/api/auth/login` | 用户登录 |
+| POST | `/api/auth/logout` | 用户登出 |
+| GET | `/api/auth/me` | 获取当前用户信息 |
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### Provider 管理
 
-## Deploy on Vercel
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/providers` | 获取所有 providers |
+| POST | `/api/providers` | 创建 provider |
+| PUT | `/api/providers/[id]` | 更新 provider |
+| DELETE | `/api/providers/[id]` | 删除 provider |
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Credential 管理
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/credentials` | 获取所有 credentials |
+| POST | `/api/credentials` | 创建 credential |
+| PUT | `/api/credentials/[id]` | 更新 credential |
+| DELETE | `/api/credentials/[id]` | 删除 credential |
+
+### 模型映射
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/mappings` | 获取所有映射 |
+| POST | `/api/mappings` | 创建映射 |
+| PUT | `/api/mappings/[id]` | 更新映射 |
+| DELETE | `/api/mappings/[id]` | 删除映射 |
+
+### 代理接口
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| POST | `/api/v1/chat/completions` | 聊天补全代理（兼容 OpenAI API 格式） |
+
+## 技术栈
+
+- **框架**: Next.js 16
+- **前端**: React 19, Tailwind CSS 4
+- **数据库**: Drizzle ORM + Neon PostgreSQL
+- **UI 组件**: shadcn/ui
+- **认证**: JWT (jose)
