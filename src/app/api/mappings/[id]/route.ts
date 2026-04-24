@@ -6,7 +6,6 @@ import { z } from "zod";
 
 const updateMappingSchema = z.object({
   priority: z.number().int().min(0).optional(),
-  maxConcurrency: z.number().int().min(1).optional(),
   isEnabled: z.boolean().optional(),
 });
 

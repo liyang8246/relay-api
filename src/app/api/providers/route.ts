@@ -8,6 +8,7 @@ import { z } from "zod";
 const createProviderSchema = z.object({
   name: z.string().min(1),
   baseUrl: z.string().url(),
+  maxConcurrency: z.number().int().min(1).default(10),
 });
 
 // 获取所有供应商
@@ -41,7 +42,7 @@ export async function POST(request: NextRequest) {
   try {
     const user = await requireAuth();
     const body = await request.json();
-    const { name, baseUrl } = createProviderSchema.parse(body);
+    const { name, baseUrl, maxConcurrency } = createProviderSchema.parse(body);
     
     const providerId = generateId();
     await db.insert(providers).values({
@@ -49,10 +50,11 @@ export async function POST(request: NextRequest) {
       userId: user.id,
       name,
       baseUrl,
+      maxConcurrency,
     });
     
     return NextResponse.json({
-      provider: { id: providerId, name, baseUrl },
+      provider: { id: providerId, name, baseUrl, maxConcurrency },
     });
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") {

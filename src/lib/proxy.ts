@@ -61,8 +61,8 @@ async function getAvailableEndpoints(userId: string, alias: string): Promise<Ava
       continue;
     }
 
-    // 检查并发限制
-    if (state && state.currentConcurrency >= mapping.maxConcurrency) {
+    // 检查并发限制（使用供应商级别的 maxConcurrency）
+    if (state && state.currentConcurrency >= provider.maxConcurrency) {
       continue;
     }
 

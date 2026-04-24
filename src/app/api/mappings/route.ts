@@ -9,7 +9,6 @@ const createMappingSchema = z.object({
   alias: z.enum(["nano", "base", "pro"]),
   credentialModelId: z.string(),
   priority: z.number().int().min(0),
-  maxConcurrency: z.number().int().min(1).default(10),
 });
 
 // 获取所有映射
@@ -48,7 +47,7 @@ export async function POST(request: NextRequest) {
   try {
     const user = await requireAuth();
     const body = await request.json();
-    const { alias, credentialModelId, priority, maxConcurrency } = createMappingSchema.parse(body);
+    const { alias, credentialModelId, priority } = createMappingSchema.parse(body);
     
     // 验证 credentialModel 存在
     const cm = await db.query.credentialModels.findFirst({
@@ -78,7 +77,6 @@ export async function POST(request: NextRequest) {
       alias,
       credentialModelId,
       priority,
-      maxConcurrency,
     });
     
     // 创建状态记录
@@ -89,7 +87,7 @@ export async function POST(request: NextRequest) {
       isHealthy: true,
     });
     
-    return NextResponse.json({ mapping: { id: mappingId, alias, priority, maxConcurrency } });
+    return NextResponse.json({ mapping: { id: mappingId, alias, priority } });
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
